@@ -44,7 +44,6 @@ add_file_record()  # adds a new record about file into 'MOLE_RC'
     exit 0
 }
 
-
 choose_files_after_date()  # filter records that are after this date  
 {
     DATES_ARRAY=$(awk -F ";" '{print $2}' $MOLE_RC | awk -F "_" '{print $1}' | sed 's/-//g' | awk -v aDATE="$a_DATE" '$0 > aDATE' | sed 's/./&-/4' | sed 's/./&-/7')   
@@ -56,7 +55,6 @@ choose_files_after_date()  # filter records that are after this date
 
     a_dates_filtered=$(grep "$DATES_ARRAY" $MOLE_RC)  # filtered records
 }
-
 
 choose_files_before_date()  # filter records that are before this date  
 {
@@ -70,7 +68,6 @@ choose_files_before_date()  # filter records that are before this date
     b_dates_filtered=$(grep "$DATES_ARRAY" $MOLE_RC)  # filtered records
 }
 
-
 choose_files_with_groups()  # filter records that belong to these groups  
 {
     GROUPS_ARRAY=$(echo "$GROUP" | sed 's/,/\n/g')  # put groups on individual lines
@@ -81,7 +78,6 @@ choose_files_with_groups()  # filter records that belong to these groups
         exit 1
     fi
 }
-
 
 check_if_file_exists()  # filter only existing files   
 {
@@ -97,7 +93,6 @@ check_if_file_exists()  # filter only existing files
     done
 }
 
-
 check_if_file_exists_m()  # filter only the most oftenly edited files   
 {
     j=0
@@ -112,7 +107,6 @@ check_if_file_exists_m()  # filter only the most oftenly edited files
     done
 }
 
-
 check_date_format()  # check the date format validity   
 {
     format_exit=$(echo "$OPTARG" | awk -F '-' '{print ($1 < 9999 && $1 > 0 && $2 <= 12 && $2 > 0 && $3 <= 31 && $3 > 0) ? 0 : 1}')
@@ -122,7 +116,6 @@ check_date_format()  # check the date format validity
         exit "$format_exit"
     fi
 }
-
 
 choose_file_in_dir()  # last edited file dir
 {
@@ -156,7 +149,6 @@ choose_file_in_dir()  # last edited file dir
     fi
 }
 
-
 choose_most_oftenly_edited_file_in_dir()  # most oftenly edited file
 {
     files_in_dir=$(grep "$actual_directory/[^/]*$" "$MOLE_RC")  # cut matching files from directory
@@ -189,7 +181,6 @@ choose_most_oftenly_edited_file_in_dir()  # most oftenly edited file
     fi
 }
 
-
 list_files()
 {
     listed_files=$(grep "$actual_directory/[^/]*$" "$MOLE_RC" | sort | uniq)
@@ -218,7 +209,7 @@ list_files()
         exit 1
     fi
 
-    indent_count  # algorithm for the indent
+    indent_count  # algorithm for the indent function
 
     k=1
     while [ "$k" -lt "$listed_files_num" ]; do
@@ -244,8 +235,7 @@ list_files()
     exit 0
 }
 
-
-indent_count()
+indent_count()  # algorithm for the indent
 {
     j=1
     min_indent=1
@@ -265,7 +255,6 @@ indent_count()
     done
     min_indent=$((min_indent+3))  # add 3 characters in between
 }
-
 
 make_log()  # create dir and file
 {
@@ -342,9 +331,7 @@ secret_log_filter=""
 ##                                                                MAIN                                                                               ##
 #######################################################################################################################################################
 
-#############################################
-## test whether "MOLE_RC" is set up or not ## 
-#############################################
+## test whether "MOLE_RC" is set up or not ##
 if [ -z "$MOLE_RC" ]; then
     echo "Variable MOLE_RC is not set up!">&2
     exit 1
@@ -359,9 +346,7 @@ elif [ ! -f "$MOLE_RC" ]; then
     fi
 fi
 
-#############################################
-## test whether realpath is set up or not  ## 
-#############################################
+## test whether realpath is set up or not ##
 real_path_test=$(realpath .)
 real_path_exit_code=$?
 
@@ -370,9 +355,7 @@ if [ "$real_path_exit_code" -ne 0 ]; then  # return_code != 0 --> realpath is no
     exit "$real_path_exit_code"
 fi
 
-#############################################
-##       set up the correct editor         ## 
-#############################################
+## set up the correct editor ##
 if [ -z "$EDITOR" ]; then
     if [ -z "$VISUAL" ]; then
         main_editor="vi"
@@ -383,39 +366,33 @@ else
     main_editor="$EDITOR"
 fi
 
-
-#############################################
-##     just directory as an argument       ## 
-#############################################
+## just directory as an argument ##
 if [ -d "$1" ] && [ "$#" -eq 1 ]; then
     actual_directory=$(realpath "$1")
     choose_file_in_dir  # choose last edited file in dir
 fi
 
-#############################################
-##              no arguments               ## 
-#############################################
+## no arguments ##
 if [ "$#" -eq 0 ]; then
     actual_directory=$(realpath .)
     choose_file_in_dir  # choose last edited file in dir
 fi
 
-#############################################
-##            'list' argument              ## 
-#############################################
+## 'list' argument ## 
 if [ "$1" = "list" ];then
     list_filter="true"
     shift
 fi
 
+## 'secret log' argument ## 
 if [ "$1" = "secret-log" ];then
     secret_log_filter="true"
     shift
 fi
 
-#############################################
-##                 getopts                 ## 
-#############################################
+###############################################################################
+##                                  GETOPTS                                  ##
+###############################################################################
 while getopts :hg:mb:a: option
 do
     case $option in
@@ -453,9 +430,7 @@ done
 OPTIND=$((OPTIND-1))   
 shift $OPTIND
 
-#############################################
-##              if statements              ## 
-#############################################
+## if statements ## 
 if [ -n "$list_filter" ]; then  # list argument
     if [ -d "$*" ]; then
         actual_directory=$(realpath "$*")
@@ -466,7 +441,7 @@ if [ -n "$list_filter" ]; then  # list argument
     list_files
 fi
 
-if [ -n "$secret_log_filter" ]; then
+if [ -n "$secret_log_filter" ]; then # secret log argument
     if [ -d "$*" ]; then
         actual_directory=$(realpath "$*")
     fi
@@ -484,7 +459,7 @@ if [ -n "$m_filter" ]; then # -m and DIRECTORY specified
 
     choose_most_oftenly_edited_file_in_dir
 fi
-if [ -z "$m_filter" ]; then
+if [ -z "$m_filter" ]; then # -m not specified
     if [ -d "$*" ]; then
         actual_directory=$(realpath "$*")
         choose_file_in_dir
