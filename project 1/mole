@@ -181,7 +181,7 @@ choose_most_oftenly_edited_file_in_dir()  # most oftenly edited file
     fi
 }
 
-list_files()
+list_files()  # list the files   
 {
     listed_files=$(grep "$actual_directory/[^/]*$" "$MOLE_RC" | sort | uniq)
     listed_files_num=$(echo "$listed_files" | wc -l)
@@ -449,7 +449,6 @@ if [ -n "$secret_log_filter" ]; then # secret log argument
     make_log
 fi
 
-
 if [ -n "$m_filter" ]; then # -m and DIRECTORY specified
     if [ -d "$*" ]; then
         actual_directory=$(realpath "$*")
@@ -459,6 +458,7 @@ if [ -n "$m_filter" ]; then # -m and DIRECTORY specified
 
     choose_most_oftenly_edited_file_in_dir
 fi
+
 if [ -z "$m_filter" ]; then # -m not specified
     if [ -d "$*" ]; then
         actual_directory=$(realpath "$*")
