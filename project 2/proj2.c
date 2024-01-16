@@ -181,20 +181,18 @@ int main(int argc, char **argv){
     exit(0);
 }
 
-
 bool valid_args(int argc, char **argv, INPUT_ARGS_t *args){
-    
     // check the amount of arguments
     if (argc != ARGS_CNT){
         fprintf(stderr, "INVALID INPUT COUNT! Expected 5 arguments, recieved %d.\n", argc-1);
-        return false;
+        return false; // return false if the arguments are not valid
     }
 
     // check whether all the arguments are numbers (digits) or not
     for (int arg_i = 1; arg_i < 6; arg_i++){ // iterate over all the arguments
-        if (!my_isdigit(argv[arg_i])){ // returns false if the argument is not a number
+        if (!my_isdigit(argv[arg_i])){
             fprintf(stderr, "IVALID INPUT VALUE! Argument number %d '%s' is not a number!\n", arg_i, argv[arg_i]);
-            return false;
+            return false; // returns false if the argument is not a number
         }
     }
 
@@ -208,14 +206,13 @@ bool valid_args(int argc, char **argv, INPUT_ARGS_t *args){
     // check the arguments values
     if (args->TZ < 0 || args->TZ > 10000 || args->TU < 0  || args->TU > 100 || args->F < 0 || args->F > 10000 || args->NZ < 0 || args->NU <= 0){
         fprintf(stderr, "IVALID INPUT VALUES!\n");
-        return false; // return false if the arguments are valid
+        return false; // return false if the arguments are not valid
     }
 
     return true; // return true if the arguments are valid
 }
 
 bool init_sems(SEMAPHORES_t *sem){
-
     // mmap all the semaphores
     if((sem->mutex_sem = mmap(NULL, sizeof(sem_t), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0)) == MAP_FAILED ||
        (sem->output_sem = mmap(NULL, sizeof(sem_t), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0)) == MAP_FAILED ||
@@ -240,7 +237,6 @@ bool init_sems(SEMAPHORES_t *sem){
 }
 
 void clear_sems(SEMAPHORES_t *sem){
-
     // destroy all the semaphores
     sem_destroy(sem->mutex_sem);
     sem_destroy(sem->output_sem);
@@ -257,7 +253,6 @@ void clear_sems(SEMAPHORES_t *sem){
 }
 
 bool init_shared_mem(SHARED_MEM_t *mem){
-
     // initialize all the shared memory
      if ((mem->action_cnt = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, -1, 0)) == MAP_FAILED ||
          (mem->post_closed = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, -1, 0)) == MAP_FAILED ||
@@ -273,7 +268,6 @@ bool init_shared_mem(SHARED_MEM_t *mem){
 }
 
 void clear_shared_mem(SHARED_MEM_t *mem){
-
     // munmap all the shared memory 
     munmap(mem->action_cnt, sizeof(int));
     munmap(mem->post_closed, sizeof(int));
