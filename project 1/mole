@@ -1,0 +1,506 @@
+#!/bin/sh
+#!/bin/bash
+
+export POSIXLY_CORRECT=yes
+export LC_ALL=C
+
+#######################################################################################################################################################
+##                                                                PROJECT INFORMATION                                                                ##
+## Subject        –   IOS – Project 1                                                                                                                ##
+## Project name   –   mole                                                                                                                           ##
+## Functionality  –   wrapper pro efektivní použití textového editoru s možností automatického výběru nejčastěji či posledně modifikovaného souboru. ##
+## Description    –   https://www.fit.vutbr.cz/study/courses/IOS/public/projekty/projekt1/ios23-projekt1.html                                        ##
+## Author         –   Marek Čupr, xcuprm01                                                                                                           ##
+## Date           –   22. 3. 2023                                                                                                                    ##
+#######################################################################################################################################################
+
+
+#######################################################################################################################################################
+##                                                                     FUNCTIONS                                                                     ##
+#######################################################################################################################################################
+
+print_usage() # prints the usage
+{
+    echo "USAGE:   mole -h"
+	echo "         mole [-g GROUP] FILE"
+	echo "         mole [-m] [FILTERS] [DIRECTORY]"
+	echo "         mole list [FILTERS] [DIRECTORY]"
+	echo "         mole [-b DATE] [-a DATE] [DIRECTORY1 [DIRECTORY2 [...]]]"
+	echo ""
+	echo "FILTERS: Filter                        Meaning"
+    echo "         [-g GROUP1[,GROUP2[,...]]]    Group specifications. A file will be considered (for opening or listing purposes) only if it's execution falls into at least on of these groups."          
+    echo "         [-a DATE]                     Records of opened (edited) files before this date will not be considered."
+    echo "         [-b DATE]                     Records of opened (edited) files after this date will not be considered."
+    echo "         DATE                          format of YYYY-MM-DD"
+}
+
+add_file_record()  # adds a new record about file into 'MOLE_RC'
+{
+    if [ -z "$GROUP" ]; then
+        printf "%s;%s\n" "$file_path" "$(date +%F_%T)" >> $MOLE_RC  # no group specified
+    else
+        printf "%s;%s;%s\n" "$file_path" "$(date +%F_%T)" "$GROUP" >> $MOLE_RC  # group specified  
+    fi
+    exit 0
+}
+
+
+choose_files_after_date()  # filter records that are after this date  
+{
+    DATES_ARRAY=$(awk -F ";" '{print $2}' $MOLE_RC | awk -F "_" '{print $1}' | sed 's/-//g' | awk -v aDATE="$a_DATE" '$0 > aDATE' | sed 's/./&-/4' | sed 's/./&-/7')   
+    
+    if [ -z "$DATES_ARRAY" ]; then
+        echo "No matching files found!">&2
+        exit 1
+    fi
+
+    a_dates_filtered=$(grep "$DATES_ARRAY" $MOLE_RC)  # filtered records
+}
+
+
+choose_files_before_date()  # filter records that are before this date  
+{
+    DATES_ARRAY=$(awk -F ";" '{print $2}' $MOLE_RC | awk -F "_" '{print $1}' | sed 's/-//g' | awk -v bDATE="$b_DATE" '$0 < bDATE' | sed 's/./&-/4' | sed 's/./&-/7')   
+
+    if [ -z "$DATES_ARRAY" ]; then
+        echo "No matching files found!">&2
+        exit 1
+    fi
+
+    b_dates_filtered=$(grep "$DATES_ARRAY" $MOLE_RC)  # filtered records
+}
+
+
+choose_files_with_groups()  # filter records that belong to these groups  
+{
+    GROUPS_ARRAY=$(echo "$GROUP" | sed 's/,/\n/g')  # put groups on individual lines
+    groups_filtered=$(grep "$GROUPS_ARRAY" $MOLE_RC)  # filtered records
+    
+    if [ -z "$groups_filtered" ]; then
+        echo "No matching files found!">&2
+        exit 1
+    fi
+}
+
+
+check_if_file_exists()  # filter only existing files   
+{
+    i=0
+    while [ "$i" -lt "$num_of_files_in_dir" ]; do
+        file_path=$(echo "$file_name" | tail -1)  # get the last file
+        if [ ! -f "$actual_directory/$file_path" ]; then  # file doesn't exist anymore
+            file_name=$(echo "$file_name" | sed '$d')  # delete the last line 
+        elif [ -f "$actual_directory/$file_path" ]; then  # file exists
+            break
+        fi
+        i=$((i+1))    
+    done
+}
+
+
+check_if_file_exists_m()  # filter only the most oftenly edited files   
+{
+    j=0
+    while [ "$j" -lt "$num_of_files_in_dir" ]; do
+        file_path=$(echo "$file_name" | head -1)  # get the most oftenly edited file
+        if [ ! -f "$actual_directory/$file_path" ]; then  # file doesn't exist anymore
+            file_name=$(echo "$file_name" | sed '1d')  # delete the first line
+        elif [ -f "$actual_directory/$file_path" ]; then  # file exists
+            break
+        fi    
+        j=$((j+1))   
+    done
+}
+
+
+check_date_format()  # check the date format validity   
+{
+    format_exit=$(echo "$OPTARG" | awk -F '-' '{print ($1 < 9999 && $1 > 0 && $2 <= 12 && $2 > 0 && $3 <= 31 && $3 > 0) ? 0 : 1}')
+
+    if [ "$format_exit" -eq 1 ]; then
+        echo "Incorrect date format!">&2
+        exit "$format_exit"
+    fi
+}
+
+
+choose_file_in_dir()  # last edited file dir
+{
+    files_in_dir=$(grep "$actual_directory/[^/]*$" "$MOLE_RC")  # cut matching files from directory
+
+    if [ -n "$a_DATE" ]; then  # -a filter
+        choose_files_after_date
+        files_in_dir=$(echo "$files_in_dir" | grep "$a_dates_filtered")  # filter matching files
+    fi
+    if [ -n "$b_DATE" ]; then  # -b filter
+        choose_files_before_date
+        files_in_dir=$(echo "$files_in_dir" | grep "$b_dates_filtered")  # filter matching files
+    fi
+    if [ -n "$g_filter" ] || [ -n "$GROUP" ]; then  # -g filter
+        choose_files_with_groups
+        files_in_dir=$(echo "$files_in_dir" | grep "$groups_filtered")  # filter matching files
+    fi
+
+    file_name=$(echo "$files_in_dir" | awk -F ";" '{print $1}' | rev | awk -F "/" '{print $1}' | rev)  # get only the file_names
+    num_of_files_in_dir=$(echo "$file_name" | wc -l)  # get the number of lines matched 
+
+    check_if_file_exists
+
+    if [ "$num_of_files_in_dir" -eq 0 ] || [ -z "$file_name" ]; then  # no file edited yet or no file matched
+        echo "No file was edited in this directory!">&2
+        exit 1
+    else  # last edited file
+        file_path="$actual_directory/$file_path" 
+        $main_editor "$file_path"
+        add_file_record
+    fi
+}
+
+
+choose_most_oftenly_edited_file_in_dir()  # most oftenly edited file
+{
+    files_in_dir=$(grep "$actual_directory/[^/]*$" "$MOLE_RC")  # cut matching files from directory
+
+    if [ -n "$a_DATE" ]; then  # -a filter
+        choose_files_after_date
+        files_in_dir=$(echo "$files_in_dir" | grep "$a_dates_filtered")
+    fi
+    if [ -n "$b_DATE" ]; then  # -b filter
+        choose_files_before_date
+        files_in_dir=$(echo "$files_in_dir" | grep "$b_dates_filtered")
+    fi
+    if [ -n "$g_filter" ]; then  # -g filter
+        choose_files_with_groups
+        files_in_dir=$(echo "$files_in_dir" | grep "$groups_filtered")
+    fi
+
+    file_name=$(echo "$files_in_dir" | awk -F ";" '{print $1}' | rev | awk -F "/" '{print $1}' | rev | sort | uniq -c | sort -rn | rev | cut -d ' ' -f1 | rev) # get only file_names
+    num_of_files_in_dir=$(echo "$file_name" | wc -l)
+
+    check_if_file_exists_m
+
+    if [ "$num_of_files_in_dir" -eq 0 ] || [ -z "$file_name" ]; then  # no file edited yet || no file matched
+        echo "No file was edited in this directory!">&2
+        exit 1
+    else  # most oftenly edited file
+        file_path="$actual_directory/$file_path" 
+        $main_editor "$file_path"
+        add_file_record
+    fi
+}
+
+
+list_files()
+{
+    listed_files=$(grep "$actual_directory/[^/]*$" "$MOLE_RC" | sort | uniq)
+    listed_files_num=$(echo "$listed_files" | wc -l)
+
+    if [ -n "$a_DATE" ]; then  # -a filter
+        choose_files_after_date
+        listed_files=$(echo "$listed_files" | grep "$a_dates_filtered")
+    fi
+    if [ -n "$b_DATE" ]; then  # -b filter
+        choose_files_before_date
+        listed_files=$(echo "$listed_files" | grep "$b_dates_filtered")
+    fi
+    if [ -n "$g_filter" ]; then  # -g filter
+        GROUPS_ARRAY=$(echo "$GROUP" | sed 's/,/\n/g')  
+        listed_files=$(echo "$listed_files" | grep "$GROUPS_ARRAY")
+    fi
+
+    listed_files=$(echo "$listed_files" | awk -F ";" '{print $1}' | rev | awk -F "/" '{print $1}' | rev | sort | uniq)
+    listed_files_num=$(echo "$listed_files" | wc -l)
+
+    listed_files_num=$((listed_files_num+1))
+
+    if [ -z "$listed_files" ]; then
+        echo "No matching files!">&2
+        exit 1
+    fi
+
+    indent_count  # algorithm for the indent
+
+    k=1
+    while [ "$k" -lt "$listed_files_num" ]; do
+        if [ -n "$g_filter" ]; then
+            listed_files=$(grep "$actual_directory/[^/]*$" "$MOLE_RC" | grep "$GROUPS_ARRAY" | awk -F ";" '{print $1}' | rev | awk -F "/" '{print $1}' | rev | sort | uniq | head -n $k | tail -1)
+        else
+            listed_files=$(grep "$actual_directory/[^/]*$" "$MOLE_RC" | awk -F ";" '{print $1}' | rev | awk -F "/" '{print $1}' | rev | sort | uniq | head -n $k | tail -1)
+        fi
+
+        listed_groups=$(grep "$actual_directory/[^/]*$"  $MOLE_RC | grep "$listed_files" | awk -F ";" '{print $3}' | sort | uniq)
+
+        if [ -n "$listed_groups" ]; then  # file is part of some group
+            listed_groups=$(echo "$listed_groups" | tr ',' '\n' | rev | sed 's/,//' | rev | sort | uniq |  sed '/^$/d' | tr '\n' ',' | rev | sed 's/,//' | rev)
+            listed_files=$(echo "$listed_files:" | awk -v indent="$min_indent" '{printf "%-"indent"s", $0}')            
+            echo "$listed_files$listed_groups"
+        else  # file is not part of any group
+            listed_groups="-"
+            listed_files=$(echo "$listed_files:" | awk -v indent="$min_indent" '{printf "%-"indent"s", $0}')             
+            echo "$listed_files$listed_groups"
+        fi
+        k=$((k+1))   
+    done
+    exit 0
+}
+
+
+indent_count()
+{
+    j=1
+    min_indent=1
+    while [ "$j" -lt "$listed_files_num" ]; do
+        if [ -n "$g_filter" ]; then
+            listed_files=$(grep "$actual_directory/[^/]*$" "$MOLE_RC" | grep "$GROUPS_ARRAY" | awk -F ";" '{print $1}' | rev | awk -F "/" '{print $1}' | rev | sort | uniq | head -n $j | tail -1)
+        else
+            listed_files=$(grep "$actual_directory/[^/]*$" "$MOLE_RC" | awk -F ";" '{print $1}' | rev | awk -F "/" '{print $1}' | rev | sort | uniq | head -n $j | tail -1)
+        fi
+
+        str_lenght="${#listed_files}"
+
+        if [ "$str_lenght" -gt "$min_indent" ]; then
+            min_indent="$str_lenght"  # find the longest string
+        fi
+        j=$((j+1))   
+    done
+    min_indent=$((min_indent+3))  # add 3 characters in between
+}
+
+
+make_log()  # create dir and file
+{
+    secret_log_file=$(printf "%s%s%s%s%s" "/home/$USER/mole/" "log_" "$USER" "_" "$(date +%F_%T)")
+    mkdir -p "/home/$USER/mole/"
+    touch "$secret_log_file"
+
+    if [ -z "$actual_directory" ]; then
+        lines=$(awk -F ";" '{print $1}' $MOLE_RC | sort | uniq)
+    else
+        lines=$(grep "$actual_directory/[^/]*$" "$MOLE_RC" | awk -F ";" '{print $1}' | sort | uniq)
+    fi
+
+    if [ -z "$lines" ]; then
+        echo "Logs not found!">&2
+        exit 1
+    fi
+
+    line_num=$(echo "$lines" | wc -l)
+
+    if [ -n "$a_DATE" ]; then  # -a filter
+        choose_files_after_date
+        a_dates_filtered=$(echo "$a_dates_filtered" | awk -F ";" '{print $2}')
+    fi
+    if [ -n "$b_DATE" ]; then  # -b filter
+        choose_files_before_date
+        b_dates_filtered=$(echo "$b_dates_filtered" | awk -F ";" '{print $2}')
+    fi
+
+    line_num=$((line_num+1))
+    l=1
+    while [ "$l" -lt "$line_num" ]; do
+        line=$(echo "$lines" | head -n $l | tail -1)
+        line_date=$(grep "$line" $MOLE_RC | awk -F ";" '{print $2}' | sort | uniq )
+
+        if [ -n "$a_DATE" ]; then  # -a filter
+            line_date=$(echo "$line_date" | grep "$a_dates_filtered")
+        fi
+        if [ -n "$b_DATE" ]; then  # -b filter
+            line_date=$(echo "$line_date" | grep "$b_dates_filtered")
+        fi
+
+        line_date=$(echo "$line_date" | tr '\n' ';' | rev | sed 's/;//' | rev)
+
+        if [ -n "$line_date" ]; then
+            echo "$line:$line_date" >> "$secret_log_file" 
+        else
+            echo "No matching files found!">&2
+        fi
+        l=$((l+1))   
+    done
+
+    bzip2 "$secret_log_file"  # zip file
+    exit 0
+}
+
+#######################################################################################################################################################
+##                                                             VARIABLES                                                                             ##
+#######################################################################################################################################################
+GROUP=""
+file_path=""
+actual_directory=""
+num_of_files_in_dir=""
+files_in_dir=""
+num_of_files_in_dir=""
+a_DATE=""
+b_DATE=""
+m_filter=""
+g_filter=""
+list_filter=""
+secret_log_filter=""
+
+#######################################################################################################################################################
+##                                                                MAIN                                                                               ##
+#######################################################################################################################################################
+
+#############################################
+## test whether "MOLE_RC" is set up or not ## 
+#############################################
+if [ -z "$MOLE_RC" ]; then
+    echo "Variable MOLE_RC is not set up!">&2
+    exit 1
+elif [ ! -f "$MOLE_RC" ]; then
+    MOLE_RC_dir_bool=$(echo "$MOLE_RC" | grep "/")  # empty variable = MOLE_RC is not a path
+    if [ -n "$MOLE_RC_dir_bool" ]; then  # MOLE_RC containts directory 
+        MOLE_RC_file_name=$(echo "$MOLE_RC" | rev | cut -d '/' -f1 | rev)  # cut file name
+        MOLE_RC_dir=$(echo "$MOLE_RC" | rev | cut -d '/' -f2- | rev)  # cut file path
+        mkdir -p "$MOLE_RC_dir" && touch "$MOLE_RC_dir/$MOLE_RC_file_name"  # create path with file inside 
+    else  # MOLE_RC doesn't contain directory
+        touch "$MOLE_RC"  # create file
+    fi
+fi
+
+#############################################
+## test whether realpath is set up or not  ## 
+#############################################
+real_path_test=$(realpath .)
+real_path_exit_code=$?
+
+if [ "$real_path_exit_code" -ne 0 ]; then  # return_code != 0 --> realpath is not set up
+    echo "Realpath is not set up!">&2
+    exit "$real_path_exit_code"
+fi
+
+#############################################
+##       set up the correct editor         ## 
+#############################################
+if [ -z "$EDITOR" ]; then
+    if [ -z "$VISUAL" ]; then
+        main_editor="vi"
+    else 
+        main_editor="$VISUAL"
+    fi
+else
+    main_editor="$EDITOR"
+fi
+
+
+#############################################
+##     just directory as an argument       ## 
+#############################################
+if [ -d "$1" ] && [ "$#" -eq 1 ]; then
+    actual_directory=$(realpath "$1")
+    choose_file_in_dir  # choose last edited file in dir
+fi
+
+#############################################
+##              no arguments               ## 
+#############################################
+if [ "$#" -eq 0 ]; then
+    actual_directory=$(realpath .)
+    choose_file_in_dir  # choose last edited file in dir
+fi
+
+#############################################
+##            'list' argument              ## 
+#############################################
+if [ "$1" = "list" ];then
+    list_filter="true"
+    shift
+fi
+
+if [ "$1" = "secret-log" ];then
+    secret_log_filter="true"
+    shift
+fi
+
+#############################################
+##                 getopts                 ## 
+#############################################
+while getopts :hg:mb:a: option
+do
+    case $option in
+        h)
+            print_usage
+            exit 0
+            ;;
+        g)
+            GROUP="${OPTARG}"
+
+            if [ -n "$group_filter" ]; then  # more than 1 group
+                g_filter="true"   
+            fi
+            if [ -n "$list_filter" ]; then
+                g_filter="true"          
+            fi
+            ;;
+        m)
+            m_filter="true"
+            ;;
+        b)
+            check_date_format
+            b_DATE=$(echo "$OPTARG" | sed 's/-//g')  # delete '-' from the date (to be able to compare it later)
+            ;;
+        a)
+            check_date_format
+            a_DATE=$(echo "$OPTARG" | sed 's/-//g')  # delete '-' from the date (to be able to compare it later)
+            ;;
+        *)
+            echo "Unknown arguments!">&2
+            exit 1
+    esac
+done
+
+OPTIND=$((OPTIND-1))   
+shift $OPTIND
+
+#############################################
+##              if statements              ## 
+#############################################
+if [ -n "$list_filter" ]; then  # list argument
+    if [ -d "$*" ]; then
+        actual_directory=$(realpath "$*")
+    else 
+        actual_directory=$(realpath .)
+    fi
+
+    list_files
+fi
+
+if [ -n "$secret_log_filter" ]; then
+    if [ -d "$*" ]; then
+        actual_directory=$(realpath "$*")
+    fi
+    
+    make_log
+fi
+
+
+if [ -n "$m_filter" ]; then # -m and DIRECTORY specified
+    if [ -d "$*" ]; then
+        actual_directory=$(realpath "$*")
+    else
+        actual_directory=$(realpath .)
+    fi
+
+    choose_most_oftenly_edited_file_in_dir
+fi
+if [ -z "$m_filter" ]; then
+    if [ -d "$*" ]; then
+        actual_directory=$(realpath "$*")
+        choose_file_in_dir
+    elif [ -z "$*" ]; then
+        actual_directory=$(realpath .)
+        choose_file_in_dir
+    fi
+fi
+
+file_path=$(realpath "$*")
+exit_code=$?
+
+if [ "$exit_code" -ne 0 ]; then
+    echo "Non-existent directory/file!">&2
+    exit "$exit_code"  # non-existent directory
+else 
+    $main_editor "$file_path"
+    add_file_record
+fi
